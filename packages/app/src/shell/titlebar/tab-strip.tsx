@@ -287,6 +287,7 @@ export function TitlebarTabStrip(props: {
 
   // A vertical strip with several servers reads as one flat list of identical
   // rows, so it groups by server. A stable sort keeps each server's tab order.
+  // `tabs` returns the tab objects themselves so `<For>` keeps every row mounted.
   const grouping = createMemo(() => {
     const servers = global.servers.list()
     const mode = preferences.appearance.tabServerGroups()
@@ -295,21 +296,26 @@ export function TitlebarTabStrip(props: {
 
     const rank = new Map(servers.map((conn, index) => [ServerConnection.key(conn), index]))
     const names = new Map(servers.map((conn) => [ServerConnection.key(conn), serverName(conn)]))
+
     // A stable sort keeps each server's own tab order, so reordering inside a group persists.
-    const sorted = props.tabs.toSorted(
+    const tabs = props.tabs.toSorted(
       (a, b) => (rank.get(a.server) ?? rank.size) - (rank.get(b.server) ?? rank.size),
     )
 
-    return sorted.map((tab, index) => ({
-      tab,
-      header: tab.server === sorted[index - 1]?.server ? undefined : (names.get(tab.server) ?? tab.server),
-    }))
+    const headers = new Map(
+      tabs.flatMap((tab, index) =>
+        tab.server === tabs[index - 1]?.server ? [] : [[tabKey(tab), names.get(tab.server) ?? tab.server] as const],
+      ),
+    )
+
+    return { tabs, headers }
   })
 
-  const rows = () => grouping() ?? props.tabs.map((tab) => ({ tab, header: undefined }))
+  const tabs = () => grouping()?.tabs ?? props.tabs
+  const header = (tab: Tab) => grouping()?.headers.get(tabKey(tab))
 
   const visibleTabs = createMemo(() =>
-    rows().flatMap((row) => (row.tab.type === "draft" || visibility[tabKey(row.tab)] ? [row.tab] : [])),
+    tabs().flatMap((tab) => (tab.type === "draft" || visibility[tabKey(tab)] ? [tab] : [])),
   )
 
   const visibleTabIds = () => visibleTabs().map(tabKey)
@@ -443,9 +449,8 @@ export function TitlebarTabStrip(props: {
             classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
             ref={listRef}
           >
-            <For each={rows()}>
-              {(row) => {
-                const tab = row.tab
+            <For each={tabs()}>
+              {(tab) => {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
                 const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
@@ -492,7 +497,7 @@ export function TitlebarTabStrip(props: {
 
                 return (
                   <>
-                    <Show when={row.header}>
+                    <Show when={header(tab)}>
                       {(title) => (
                         <div
                           data-slot="tab-server-group"

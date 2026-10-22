@@ -64,7 +64,10 @@ export function createHomeSessionsController(home: HomeController) {
     grouping: "date",
   })
 
-  const grouping = () => preferences.grouping
+  // Server grouping needs more than one server to mean anything, and a stored
+  // choice must not strand Home in a mode whose control is hidden.
+  const grouping = (): HomeSessionGrouping =>
+    home.server.list().length > 1 ? preferences.grouping : "date"
 
   const projectDirectories = createMemo(() => {
     const selected = home.selection.value().directory
@@ -133,15 +136,25 @@ export function createHomeSessionsController(home: HomeController) {
         projects: () => home.project.forServer(conn),
         server: ServerConnection.key(conn),
         resolveProject: (session) => ctx.projects.forSession(session),
-      })
-        // Cap each server before merging so one busy server cannot hide the others.
-        .slice(0, HOME_SESSION_LIMIT),
+      }),
     )
   })
 
+  // Cap each server for display so one busy server cannot hide the others, while
+  // search keeps every retained record.
+  const records = createMemo(() =>
+    indexedSessions().flatMap(({ conn }) => {
+      const key = ServerConnection.key(conn)
+
+      return allRecords()
+        .filter((record) => record.server === key)
+        .slice(0, HOME_SESSION_LIMIT)
+    }),
+  )
+
   const groups = createMemo(() =>
     groupSessions(
-      allRecords(),
+      records(),
       grouping(),
       language,
       (server) => serverName(home.server.list().find((item) => ServerConnection.key(item) === server)),
@@ -369,7 +382,7 @@ export function createHomeSessionsController(home: HomeController) {
       language,
     },
     data: {
-      records: allRecords,
+      records,
       groups,
       grouping,
       setGrouping: (value: HomeSessionGrouping) => setPreferences("grouping", value),

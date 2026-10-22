@@ -531,7 +531,9 @@ test("vertical tabs group by server without changing tabs inside a server", asyn
   await twoServers(page, { a: [sessionA, sessionA2], b: [sessionB] })
   await seed(page, {
     settings: { appearance: { tabLayout: "vertical" } },
-    tabs: [sessionA.id, sessionA2.id, { session: sessionB.id, server: REMOTE_SERVER }],
+    // Interleaved on purpose: grouping must sort A1, A2 before B1 while keeping
+    // each server's own order.
+    tabs: [sessionA.id, { session: sessionB.id, server: REMOTE_SERVER }, sessionA2.id],
   })
   await page.goto(sessionHref(sessionA.id))
 
